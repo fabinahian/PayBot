@@ -19,11 +19,16 @@ async def user_is_admin(update: Update):
             return True
     return False
 
+def normalize_username(username):
+    """Normalize the username to lowercase for consistency."""
+    return username.lower()
+
 def get_user_id_by_username(username):
     """Retrieve user ID from the database based on the username."""
+    normalized_username = normalize_username(username)
     users = database.get_all_balances()
     for user in users:
-        if user[0] == username:
+        if normalize_username(user[0]) == normalized_username:
             return user[2]  # Assuming username is at index 0, user_id is at index 2
     return None
 
@@ -53,7 +58,7 @@ async def add_user(update: Update, context):
     chat_id = update.effective_chat.id
     user_id = update.effective_user.id
     try:
-        username = context.args[0]
+        username = normalize_username(context.args[0])
         success = database.add_user(user_id, username)
         if success:
             await context.bot.send_message(chat_id=chat_id, text=f"User {username} added! 🎉")
@@ -66,7 +71,7 @@ async def edit_name(update: Update, context):
     """Edit a user's name."""
     user_id = update.effective_user.id
     try:
-        new_name = context.args[0]
+        new_name = normalize_username(context.args[0])
         database.update_username(user_id, new_name)
         await update.message.reply_text(f"Name updated to {new_name}! 💫")
     except IndexError:
@@ -79,7 +84,7 @@ async def add_fund(update: Update, context):
         return
 
     try:
-        partial_name = context.args[0]
+        partial_name = normalize_username(context.args[0])
         amount = float(context.args[1])
 
         # Get possible usernames from the database that match the partial name
@@ -103,12 +108,12 @@ async def add_fund(update: Update, context):
 
 async def deduct_fund(update: Update, context):
     """Admins can deduct funds from a user."""
-    if not user_is_admin(update):
+    if not await user_is_admin(update):
         await update.message.reply_text("Only admins can deduct funds! 😤")
         return
 
     try:
-        target_username = context.args[0]
+        target_username = normalize_username(context.args[0])
         amount = float(context.args[1])
         user_id = get_user_id_by_username(target_username)
         if user_id:
@@ -148,7 +153,7 @@ async def show_all_balance(update: Update, context):
     balances = database.get_all_balances()
     if balances:
         # Adjust the unpacking to ignore telegram_id
-        balance_list = "\n".join([f"{name}: {balance:.2f}" for name, balance, _ in balances])
+        balance_list = "\n".join([f"{normalize_username(name)}: {balance:.2f}" for name, balance, _ in balances])
         await update.message.reply_text(f"All balances:\n{balance_list}")
     else:
         await update.message.reply_text("No users found in the database.")

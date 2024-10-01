@@ -17,8 +17,9 @@ conn.commit()
 
 def add_user(telegram_id, username):
     """Add a new user to the database with a starting balance of 0.00."""
+    normalized_username = username.lower()  # Normalize to lowercase
     try:
-        cursor.execute("INSERT INTO users (telegram_id, username) VALUES (?, ?)", (telegram_id, username))
+        cursor.execute("INSERT INTO users (telegram_id, username) VALUES (?, ?)", (telegram_id, normalized_username))
         conn.commit()
         return True
     except sqlite3.IntegrityError:  # Handle if user already exists
@@ -26,7 +27,8 @@ def add_user(telegram_id, username):
 
 def update_username(telegram_id, new_username):
     """Update the username of an existing user."""
-    cursor.execute("UPDATE users SET username = ? WHERE telegram_id = ?", (new_username, telegram_id))
+    normalized_username = new_username.lower()
+    cursor.execute("UPDATE users SET username = ? WHERE telegram_id = ?", (normalized_username, telegram_id))
     conn.commit()
 
 def add_fund(telegram_id, amount):
@@ -52,11 +54,13 @@ def get_all_balances():
 
 def get_user_id_by_username(username):
     """Retrieve the Telegram ID of a user by their username."""
-    cursor.execute("SELECT telegram_id FROM users WHERE username = ?", (username,))
+    normalized_username = username.lower()
+    cursor.execute("SELECT telegram_id FROM users WHERE username = ?", (normalized_username,))
     result = cursor.fetchone()
     return result[0] if result else None
 
 def get_users_by_prefix(prefix):
     """Retrieve users whose usernames start with the provided prefix."""
-    cursor.execute("SELECT username, balance, telegram_id FROM users WHERE username LIKE ?", (prefix + '%',))
+    normalized_prefix = prefix.lower()
+    cursor.execute("SELECT username, balance, telegram_id FROM users WHERE username LIKE ?", (normalized_prefix + '%',))
     return cursor.fetchall()
