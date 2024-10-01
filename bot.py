@@ -2,6 +2,7 @@ from telegram import Update, BotCommand
 from telegram.ext import Application, CommandHandler
 import config
 import database
+import re
 
 # Debugging flag
 DEBUG = True
@@ -55,13 +56,14 @@ async def add_user(update: Update, context):
     user_id = update.effective_user.id
     try:
         username = context.args[0]
-        success = database.add_user(user_id, username)
+        success = database.add_user(chat_id, user_id, username)  # Pass chat_id
         if success:
             await context.bot.send_message(chat_id=chat_id, text=f"User {username} added! 🎉")
         else:
             await context.bot.send_message(chat_id=chat_id, text="You are already in the database! 😎")
     except IndexError:
         await context.bot.send_message(chat_id=chat_id, text="Please provide a valid name.")
+
 
 async def edit_name(update: Update, context):
     """Edit a user's name."""
@@ -111,7 +113,7 @@ async def deduct_fund(update: Update, context):
     try:
         target_username = context.args[0]
         amount = float(context.args[1])
-        user_id = get_user_id_by_username(target_username)
+        user_id = database.get_user_id_by_username(target_username, update.effective_chat.id)  # Pass chat_id
         if user_id:
             database.deduct_fund(user_id, amount)
             await update.message.reply_text(f"Deducted {amount:.2f} from {target_username}'s balance! 💰")
@@ -121,11 +123,24 @@ async def deduct_fund(update: Update, context):
         await update.message.reply_text("Please provide a username and valid amount.")
 
 async def pay(update: Update, context):
-    """Deduct amount from user balance with a fun response, ensuring amount is always deducted."""
+    """Deduct amount from user balance with a fun response."""
     user_id = update.effective_user.id
     try:
         description = context.args[0]
-        amount = abs(float(context.args[1]))  # Ensure the amount is always positive for deduction
+        amount_str = context.args[1]
+
+        # Validate the amount input
+        if not re.match(r'^\d+(\.\d{1,2})?$', amount_str):  # Check for exact numerical values
+            await update.message.reply_text("Please provide a valid positive number for the amount (e.g., 100 or 100.00).")
+            return
+
+        amount = float(amount_str)
+
+        # Ensure the amount is positive
+        if amount <= 0:
+            await update.message.reply_text("You cannot pay a negative amount! 💸")
+            return
+
         database.deduct_fund(user_id, amount)
         new_balance = database.get_balance(user_id)
         await update.message.reply_text(
@@ -145,21 +160,20 @@ async def show_my_balance(update: Update, context):
         await update.message.reply_text("You are not in the system yet!")
 
 async def show_all_balance(update: Update, context):
-    """Show all balances."""
-    balances = database.get_all_balances()
+    """Show all balances for the current chat."""
+    chat_id = update.effective_chat.id
+    balances = database.get_all_balances(chat_id)  # Pass chat_id
     if balances:
-        balance_list = "\n".join([f"{name}: {balance:.2f}" for name, balance, _ in balances])
+        balance_list = "\n".join([f"{name}: {balance:.2f}" for name, balance in balances])
         await update.message.reply_text(f"All balances:\n{balance_list}")
     else:
-        await update.message.reply_text("No users found in the database.")
+        await update.message.reply_text("No users found in this group.")
 
 async def reset(update: Update, context):
-    """Reset the bot's database, removing all users."""
-    if not await user_is_admin(update):
-        await update.message.reply_text("Only admins can reset the bot! 😤")
-        return
-    database.reset_db()
-    await update.message.reply_text("The bot has been reset! All users removed. 🎉")
+    """Reset the bot data for the current chat."""
+    chat_id = update.effective_chat.id
+    database.reset_users(chat_id)  # Implement reset logic for specific chat_id
+    await context.bot.send_message(chat_id=chat_id, text="The bot has been reset! All users removed. 🎉")
 
 def main():
     """Start the bot."""
