@@ -19,11 +19,11 @@ async def user_is_admin(update: Update):
             return True
     return False
 
-def get_user_id_by_username(username, chat_id):
-    """Retrieve user ID from the database based on the username and chat_id."""
-    users = database.get_all_balances(chat_id)
+def get_user_id_by_username(username):
+    """Retrieve user ID from the database based on the username."""
+    users = database.get_all_balances()
     for user in users:
-        if user[0] == username:
+        if user[0].lower() == username.lower():
             return user[2]  # Assuming username is at index 0, user_id is at index 2
     return None
 
@@ -45,6 +45,7 @@ async def help_command(update: Update, context):
         "/pay 'description' 'amount' - Make a payment\n"
         "/showmybalance - Show your balance\n"
         "/showallbalance - Show all balances\n"
+        "/reset - Admins can reset the bot data"
     )
     await context.bot.send_message(chat_id=chat_id, text=help_text)
 
@@ -54,7 +55,7 @@ async def add_user(update: Update, context):
     user_id = update.effective_user.id
     try:
         username = context.args[0]
-        success = database.add_user(user_id, username, chat_id)
+        success = database.add_user(user_id, username)
         if success:
             await context.bot.send_message(chat_id=chat_id, text=f"User {username} added! 🎉")
         else:
@@ -65,10 +66,9 @@ async def add_user(update: Update, context):
 async def edit_name(update: Update, context):
     """Edit a user's name."""
     user_id = update.effective_user.id
-    chat_id = update.effective_chat.id
     try:
         new_name = context.args[0]
-        database.update_username(user_id, new_name, chat_id)
+        database.update_username(user_id, new_name)
         await update.message.reply_text(f"Name updated to {new_name}! 💫")
     except IndexError:
         await update.message.reply_text("Please provide a new name.")
@@ -79,18 +79,17 @@ async def add_fund(update: Update, context):
         await update.message.reply_text("Nice try, but only admins can add funds! 😎")
         return
 
-    chat_id = update.effective_chat.id
     try:
         partial_name = context.args[0]
         amount = float(context.args[1])
 
         # Get possible usernames from the database that match the partial name
-        possible_users = database.get_users_by_prefix(partial_name, chat_id)
+        possible_users = database.get_users_by_prefix(partial_name)
 
         if len(possible_users) == 1:
             user_id = possible_users[0][2]  # Assuming user_id is at index 2 in the returned values
-            database.add_fund(user_id, amount, chat_id)
-            new_balance = database.get_balance(user_id, chat_id)
+            database.add_fund(user_id, amount)
+            new_balance = database.get_balance(user_id)
             await update.message.reply_text(
                 f"🎉 Woohoo! Added {amount:.2f} to {possible_users[0][0]}'s balance! 💰\n"
                 f"Updated balance for {possible_users[0][0]}: {new_balance:.2f} 💸"
@@ -109,13 +108,12 @@ async def deduct_fund(update: Update, context):
         await update.message.reply_text("Only admins can deduct funds! 😤")
         return
 
-    chat_id = update.effective_chat.id
     try:
         target_username = context.args[0]
         amount = float(context.args[1])
-        user_id = get_user_id_by_username(target_username, chat_id)
+        user_id = get_user_id_by_username(target_username)
         if user_id:
-            database.deduct_fund(user_id, amount, chat_id)
+            database.deduct_fund(user_id, amount)
             await update.message.reply_text(f"Deducted {amount:.2f} from {target_username}'s balance! 💰")
         else:
             await update.message.reply_text("User not found!")
@@ -123,14 +121,13 @@ async def deduct_fund(update: Update, context):
         await update.message.reply_text("Please provide a username and valid amount.")
 
 async def pay(update: Update, context):
-    """Deduct amount from user balance with a fun response."""
+    """Deduct amount from user balance with a fun response, ensuring amount is always deducted."""
     user_id = update.effective_user.id
-    chat_id = update.effective_chat.id
     try:
         description = context.args[0]
-        amount = float(context.args[1])
-        database.deduct_fund(user_id, amount, chat_id)
-        new_balance = database.get_balance(user_id, chat_id)
+        amount = abs(float(context.args[1]))  # Ensure the amount is always positive for deduction
+        database.deduct_fund(user_id, amount)
+        new_balance = database.get_balance(user_id)
         await update.message.reply_text(
             f"🛍️ Payment for {description} of {amount:.2f} made! 💸\n"
             f"Your new balance is {new_balance:.2f}. Time to save up! 💰"
@@ -141,8 +138,7 @@ async def pay(update: Update, context):
 async def show_my_balance(update: Update, context):
     """Show the user's balance."""
     user_id = update.effective_user.id
-    chat_id = update.effective_chat.id
-    balance = database.get_balance(user_id, chat_id)
+    balance = database.get_balance(user_id)
     if balance is not None:
         await update.message.reply_text(f"Your balance is {balance:.2f} 🤑")
     else:
@@ -150,14 +146,20 @@ async def show_my_balance(update: Update, context):
 
 async def show_all_balance(update: Update, context):
     """Show all balances."""
-    chat_id = update.effective_chat.id
-    balances = database.get_all_balances(chat_id)
+    balances = database.get_all_balances()
     if balances:
-        # Adjust the unpacking to ignore telegram_id
         balance_list = "\n".join([f"{name}: {balance:.2f}" for name, balance, _ in balances])
         await update.message.reply_text(f"All balances:\n{balance_list}")
     else:
         await update.message.reply_text("No users found in the database.")
+
+async def reset(update: Update, context):
+    """Reset the bot's database, removing all users."""
+    if not await user_is_admin(update):
+        await update.message.reply_text("Only admins can reset the bot! 😤")
+        return
+    database.reset_db()
+    await update.message.reply_text("The bot has been reset! All users removed. 🎉")
 
 def main():
     """Start the bot."""
@@ -173,6 +175,7 @@ def main():
     application.add_handler(CommandHandler("pay", pay))
     application.add_handler(CommandHandler("showmybalance", show_my_balance))
     application.add_handler(CommandHandler("showallbalance", show_all_balance))
+    application.add_handler(CommandHandler("reset", reset))  # Reset handler for admin
 
     # Start polling
     application.run_polling()
