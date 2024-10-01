@@ -113,7 +113,7 @@ async def deduct_fund(update: Update, context):
         return
 
     try:
-        target_username = normalize_username(context.args[0])
+        target_username = context.args[0].lower()  # Convert input to lowercase
         amount = float(context.args[1])
         user_id = get_user_id_by_username(target_username)
         if user_id:
@@ -123,6 +123,7 @@ async def deduct_fund(update: Update, context):
             await update.message.reply_text("User not found!")
     except (IndexError, ValueError):
         await update.message.reply_text("Please provide a username and valid amount.")
+
 
 async def pay(update: Update, context):
     """Deduct amount from user balance with a fun response."""

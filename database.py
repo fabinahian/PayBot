@@ -17,13 +17,14 @@ conn.commit()
 
 def add_user(telegram_id, username):
     """Add a new user to the database with a starting balance of 0.00."""
-    normalized_username = username.lower()  # Normalize to lowercase
     try:
+        normalized_username = username.lower()  # Convert to lowercase
         cursor.execute("INSERT INTO users (telegram_id, username) VALUES (?, ?)", (telegram_id, normalized_username))
         conn.commit()
         return True
     except sqlite3.IntegrityError:  # Handle if user already exists
         return False
+
 
 def update_username(telegram_id, new_username):
     """Update the username of an existing user."""
@@ -54,10 +55,11 @@ def get_all_balances():
 
 def get_user_id_by_username(username):
     """Retrieve the Telegram ID of a user by their username."""
-    normalized_username = username.lower()
+    normalized_username = username.lower()  # Convert to lowercase for lookup
     cursor.execute("SELECT telegram_id FROM users WHERE username = ?", (normalized_username,))
     result = cursor.fetchone()
     return result[0] if result else None
+
 
 def get_users_by_prefix(prefix):
     """Retrieve users whose usernames start with the provided prefix."""
